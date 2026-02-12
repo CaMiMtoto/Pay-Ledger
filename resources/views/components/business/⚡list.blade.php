@@ -1,6 +1,10 @@
 <?php
 
+use App\Constants\Status;
+use App\Exports\BusinessExport;
 use App\Models\Business;
+use App\Services\BusinessService;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Component;
 
 new class extends Component {
@@ -20,6 +24,8 @@ new class extends Component {
     #[\Livewire\Attributes\Url(except: '')]
     public string $search = '';
 
+    #[\Livewire\Attributes\Url(except: 'All')]
+    public string $filterStatus = '';
     public bool $showModal = false;
 
     protected array $rules = [
@@ -28,6 +34,11 @@ new class extends Component {
         'email' => ['nullable', 'string', 'email', 'max:50'],
         'address' => ['nullable', 'string', 'max:50']
     ];
+
+    public function mount(): void
+    {
+        $this->businessService = new BusinessService();
+    }
 
     public function sort($column): void
     {
@@ -43,7 +54,6 @@ new class extends Component {
     public function edit($id): void
     {
         $business = Business::findOrFail($id);
-
         $this->editingId = $business->id;
         $this->name = $business->name;
         $this->phone = $business->phone;
@@ -90,18 +100,32 @@ new class extends Component {
     #[\Livewire\Attributes\Computed]
     public function businesses(): object
     {
-        return Business::query()
-            ->when($this->search, function ($query) {
-                $query->where('name', 'like', '%' . $this->search . '%')
-                    ->orWhere('phone', 'like', '%' . $this->search . '%');
-            })
-            ->orderBy($this->sortBy, $this->sortDirection)
-            ->paginate(10);
+
+        return (new BusinessService())
+            ->getListBuilder(
+                search: $this->search,
+                filterStatus: $this->filterStatus,
+                sortBy: $this->sortBy,
+                sortDirection: $this->sortDirection
+            )->paginate(10);
     }
 
     public function updatedSearch(): void
     {
         $this->resetPage();
+    }
+
+    public function exportData()
+    {
+        return Excel::download(
+            new BusinessExport(
+                $this->search,
+                $this->filterStatus,
+                $this->sortBy,
+                $this->sortDirection
+            ),
+            'applications-' . now()->format('Ymd-His') . '.xlsx'
+        );
     }
 };
 
@@ -140,19 +164,22 @@ new class extends Component {
         <flux:card class="space-y-6">
             <div class="flex items-center gap-4 justify-between">
                 <div>
-                    <flux:dropdown>
-                        <flux:button icon:trailing="chevron-down">Sort by</flux:button>
 
+                    <flux:dropdown>
+                        <flux:button icon:trailing="chevron-down">Filter Status</flux:button>
                         <flux:menu>
-                            <flux:menu.radio.group wire:model="sortBy">
-                                <flux:menu.radio checked>Latest activity</flux:menu.radio>
-                                <flux:menu.radio>Date created</flux:menu.radio>
-                                <flux:menu.radio>Most popular</flux:menu.radio>
+                            <flux:menu.radio.group wire:model.live="filterStatus">
+                                <flux:menu.radio>All</flux:menu.radio>
+                                @foreach(Status::businessStatuses() as $item)
+                                    <flux:menu.radio>
+                                        {{ ucfirst($item) }}
+                                    </flux:menu.radio>
+                                @endforeach
                             </flux:menu.radio.group>
                         </flux:menu>
                     </flux:dropdown>
                 </div>
-                <div>
+                <div class="flex gap-2">
                     <flux:input type="text" placeholder="Search businesses..." :loading="false"
                                 wire:model.live.debounce="search"
                                 icon="magnifying-glass">
@@ -160,6 +187,9 @@ new class extends Component {
                             <flux:button size="sm" wire:loading variant="subtle" icon="loading" class="-mr-1"/>
                         </x-slot>
                     </flux:input>
+                    <flux:button type="button" variant="primary" color="green" icon="download" wire:click="exportData">
+                        Export
+                    </flux:button>
                 </div>
             </div>
             {{--            <flux:input  placeholder="Search orders" />--}}
