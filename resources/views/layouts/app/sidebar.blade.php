@@ -18,6 +18,10 @@
                                :current="request()->routeIs('admin.dashboard')" wire:navigate>
                 {{ __('Dashboard') }}
             </flux:sidebar.item>
+            <flux:sidebar.item icon="shopping-bag" :href="route('admin.customers.index')"
+                               :current="request()->routeIs('admin.customers.index')" wire:navigate>
+                {{ __('Customers') }}
+            </flux:sidebar.item>
             <flux:sidebar.item icon="store" :href="route('admin.businesses.list')"
                                :current="request()->routeIs('admin.businesses.list')" wire:navigate>
                 {{ __('Businesses') }}
@@ -31,8 +35,8 @@
                 </flux:sidebar.item>
             @endcan
 
-            <flux:sidebar.item :href="route('admin.permissions.list')" :current="request()->routeIs('admin.permissions.list')">Roles</flux:sidebar.item>
-            <flux:sidebar.item :href="route('admin.permissions.list')" :current="request()->routeIs('admin.permissions.list')">Permissions</flux:sidebar.item>
+            <flux:sidebar.item :href="route('admin.roles.list')" :current="request()->routeIs('admin.roles.list')" wire:navigate>Roles</flux:sidebar.item>
+            <flux:sidebar.item :href="route('admin.permissions.list')" :current="request()->routeIs('admin.permissions.list')" wire:navigate>Permissions</flux:sidebar.item>
         </flux:sidebar.group>
     </flux:sidebar.nav>
 

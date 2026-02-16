@@ -3,6 +3,7 @@
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Validation\Rule;
 use LaravelIdea\Helper\App\Models\_IH_Business_C;
 use Livewire\Component;
 
@@ -16,6 +17,7 @@ new class extends Component {
     public string $address = '';
     public bool $is_active = false;
     public ?int $business_id = null;
+    public array $roleIds = [];
 
 
     public ?int $editingId = null;
@@ -27,15 +29,14 @@ new class extends Component {
     #[\Livewire\Attributes\Url(except: '')]
     public string $search = '';
     public bool $showModal = false;
+    public string $statusFilter = 'All';
+    public Collection $roles;
 
-    protected array $rules = [
-        'name' => ['required', 'max:50'],
-        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-        'phone' => ['required', 'string', 'max:20'],
-        'address' => ['nullable', 'string', 'max:255'],
-        'is_active' => ['nullable', 'boolean'],
-        'business_id' => ['required', 'exists:businesses,id'],
-    ];
+
+    public function mount(): void
+    {
+        $this->roles = $this->getRoles();
+    }
 
     public function sort($column): void
     {
@@ -57,12 +58,25 @@ new class extends Component {
         $this->address = $existingUser->address;
         $this->business_id = $existingUser->business_id;
         $this->is_active = $existingUser->is_active;
+        $this->roleIds = $existingUser->roles()->pluck('id')->toArray();
         $this->modal('add-modal')->show();
     }
 
     public function save(): void
     {
-        $this->validate();
+        $this->validate([
+                'name' => ['required', 'max:50'],
+                'email' => ['required', 'email', 'max:255',
+                    Rule::unique('users', 'email')->ignore($this->editingId)
+                ],
+                'phone' => ['required', 'string', 'max:20'],
+                'address' => ['nullable', 'string', 'max:255'],
+                'is_active' => ['nullable', 'boolean'],
+                'business_id' => ['required', 'exists:businesses,id'],
+                'roleIds' => ['array'],
+                'roleIds.*' => ['exists:roles,id'],
+            ]
+        );
         $isNewUser = !$this->editingId;
 
         $user = User::updateOrCreate(
@@ -76,7 +90,7 @@ new class extends Component {
                 'business_id' => $this->business_id,
             ]
         );
-
+        $user->roles()->sync($this->roleIds);
         if ($isNewUser) {
             Password::sendResetLink([
                 'email' => $user->email
@@ -122,13 +136,31 @@ new class extends Component {
     {
         return User::query()
             ->with(['business'])
+            ->withCount(['roles'])
             ->when($this->search, function (Builder $query) {
                 $query->where('name', 'like', '%' . $this->search . '%')
                     ->orWhere('email', 'like', '%' . $this->search . '%')
                     ->orWhere('phone', 'like', '%' . $this->search . '%');
             })
+            ->when($this->statusFilter != 'All', function (Builder $query) {
+                if ($this->statusFilter == 'Active') {
+                    $query->where('is_active', true);
+                } else if ($this->statusFilter == 'Inactive') {
+                    $query->where('is_active', false);
+                }
+            })
             ->orderBy($this->sortBy, $this->sortDirection)
             ->paginate(10);
+    }
+
+    private function getRoles(): Collection
+    {
+        return \Spatie\Permission\Models\Role::query()->latest()->get();
+    }
+
+    public function resetFormData(): void
+    {
+        $this->reset(['name', 'phone', 'editingId', 'email', 'address', 'is_active', 'business_id', 'roleIds']);
     }
 };
 ?>
@@ -172,8 +204,10 @@ new class extends Component {
                     <flux:dropdown>
                         <flux:button icon:trailing="chevron-down">Filter Status</flux:button>
                         <flux:menu>
-                            <flux:menu.radio.group>
+                            <flux:menu.radio.group wire:model.live="statusFilter">
                                 <flux:menu.radio>All</flux:menu.radio>
+                                <flux:menu.radio>Active</flux:menu.radio>
+                                <flux:menu.radio>Inactive</flux:menu.radio>
                             </flux:menu.radio.group>
                         </flux:menu>
                     </flux:dropdown>
@@ -209,10 +243,7 @@ new class extends Component {
                                            wire:click="sort('business_id')">
                             Business
                         </flux:table.column>
-                        <flux:table.column sortable :sorted="$sortBy === 'phone'" :direction="$sortDirection"
-                                           wire:click="sort('phone')">
-                            Phone
-                        </flux:table.column>
+                        <flux:table.column>Roles</flux:table.column>
                         <flux:table.column sortable :sorted="$sortBy === 'status'" :direction="$sortDirection"
                                            wire:click="sort('status')">
                             Status
@@ -226,15 +257,16 @@ new class extends Component {
                     <flux:table.rows>
                         @foreach ($this->users as $order)
                             <flux:table.row :key="$order->id">
-                                <flux:table.cell class="flex items-center gap-3">
-                                    {{ $order->created_at->format("Y-m-d h:i:s") }}
-                                </flux:table.cell>
-
+                                <flux:table.cell
+                                    class="flex items-center gap-3">{{ $order->created_at->format("Y-m-d h:i:s") }}</flux:table.cell>
                                 <flux:table.cell class="whitespace-nowrap">{{ $order->name }}</flux:table.cell>
-                                <flux:table.cell class="whitespace-nowrap">{{ $order->email }}</flux:table.cell>
+                                <flux:table.cell class="whitespace-nowrap">
+                                    <span class="text-sm block text-black mb-1">{{ $order->email }}</span>
+                                    <span class="text-xs block">{{ $order->phone }}</span>
+                                </flux:table.cell>
                                 <flux:table.cell
                                     class="whitespace-nowrap">{{ $order->business->name??'N/A' }}</flux:table.cell>
-                                <flux:table.cell class="whitespace-nowrap">{{ $order->phone }}</flux:table.cell>
+                                <flux:table.cell class="whitespace-nowrap">{{ $order->roles_count }}</flux:table.cell>
 
                                 <flux:table.cell>
                                     <flux:badge size="sm" :color="$order->is_active?'green':'red'" rounded
@@ -268,7 +300,7 @@ new class extends Component {
 
         {{-- MODAL --}}
 
-        <flux:modal name="add-modal" class="md:w-7xl">
+        <flux:modal name="add-modal" class="md:w-7xl" @cancel="resetFormData">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">
@@ -297,7 +329,15 @@ new class extends Component {
                         <flux:input label="Name" wire:model="name" placeholder="Name"/>
                         <flux:input type="email" label="Email" wire:model="email" placeholder="Email Address"/>
                         <flux:input type="tel" label="Phone" wire:model="phone" placeholder="Phone Number"/>
-                        <flux:input label="Address" wire:model="address" placeholder="Address"/>
+                        <div class="space-y-2 grid grid-cols-1 gap-2 md:grid-cols-2 place-items-start">
+                            @foreach($roles as $permission)
+                                <flux:field variant="inline">
+                                    <flux:checkbox wire:model="roleIds" value="{{ $permission->id }}"/>
+                                    <flux:label>{{ $permission->name }}</flux:label>
+                                    <flux:error name="roleIds"/>
+                                </flux:field>
+                            @endforeach
+                        </div>
                     </div>
                     <div class="flex gap-2 ">
                         <flux:spacer/>

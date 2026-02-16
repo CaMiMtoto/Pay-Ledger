@@ -15,6 +15,7 @@ Route::group(['middleware' => 'auth', 'prefix' => 'admin', 'as' => 'admin.'], fu
     Route::livewire('/businesses', 'business.list')->name('businesses.list');
 
     Route::livewire('/users', 'users.list')->name('users.list')->middleware('can:' . AppPermission::MANAGE_USERS);
+    Route::livewire('/roles', 'roles.list')->name('roles.list')->middleware('can:' . AppPermission::MANAGE_ROLES);
     Route::livewire('/permissions', 'permissions.list')->name('permissions.list')->middleware('can:' . AppPermission::MANAGE_PERMISSIONS);
 
 });
