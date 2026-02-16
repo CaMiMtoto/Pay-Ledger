@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -26,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         Model::unguard();
+        Gate::before(function ($user, $ability) {
+            return $user->is_super_admin ? true : null;
+        });
     }
 
     /**
