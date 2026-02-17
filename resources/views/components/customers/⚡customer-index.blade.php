@@ -3,8 +3,10 @@
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 use LaravelIdea\Helper\App\Models\_IH_Business_C;
+use LaravelIdea\Helper\App\Models\_IH_Customer_C;
 use Livewire\Component;
 
 new class extends Component {
@@ -17,7 +19,9 @@ new class extends Component {
     public string $notes = '';
     public ?int $business_id = null;
     public ?int $editingId = null;
-    public ?User $deletingRecord = null;
+    #[\Livewire\Attributes\Url(except: 10)]
+    public int $perPage = 10;
+    public ?\App\Models\Customer $deletingRecord = null;
     #[\Livewire\Attributes\Url(except: '')]
     public string $sortBy = 'created_at';
     #[\Livewire\Attributes\Url(except: '')]
@@ -26,10 +30,12 @@ new class extends Component {
     public string $search = '';
     public bool $showModal = false;
     public string $statusFilter = 'All';
+    public Collection $businesses;
+    public array $pageSizes = [10, 25, 50, 100];
 
     public function mount(): void
     {
-
+        $this->businesses = $this->getBusinesses();
     }
 
     public function sort($column): void
@@ -67,7 +73,16 @@ new class extends Component {
                 'regex:/^(0\d{9}|25\d{11})$/',
                 Rule::unique('users', 'phone')->ignore($this->editingId),
             ],
-            'notes' => ['nullable', 'string', 'max:255']
+            'notes' => ['nullable', 'string', 'max:255'],
+            'business_id' => [
+                // If the user is super admin, business_id is required and must exist in businesses table
+                Rule::requiredIf(fn() => auth()->user()->is_super_admin),
+                Rule::exists('businesses', 'id')->where(function ($query) {
+                    if (!auth()->user()->is_super_admin) {
+                        $query->where('id', auth()->user()->business_id);
+                    }
+                }),
+            ]
         ]);
         $isNewUser = !$this->editingId;
         // Normalize phone number to always start with 25
@@ -83,15 +98,15 @@ new class extends Component {
             $phone = '25' . $phone;
         }
 
-        $user = User::updateOrCreate(
+        $user = \App\Models\Customer::updateOrCreate(
             ['id' => $this->editingId],
             [
                 'name' => $this->name,
                 'email' => $this->email,
-                'is_active' => $this->is_active,
-                'business_id' => auth()->user()->business_id,
+                'business_id' => $this->business_id ?? auth()->user()->business_id,
                 'created_by' => auth()->id(),
-                'phone'=>$phone
+                'phone' => $phone,
+                'notes' => $this->notes
             ]
         );
 
@@ -104,7 +119,7 @@ new class extends Component {
 
     public function confirmDeletion($id): void
     {
-        $this->deletingRecord = User::findOrFail($id);
+        $this->deletingRecord = \App\Models\Customer::findOrFail($id);
         $this->modal('delete-record')->show();
     }
 
@@ -120,7 +135,7 @@ new class extends Component {
     }
 
 
-    public function getBusinesses(): Collection|array|_IH_Business_C
+    public function getBusinesses(): Collection
     {
         return \App\Models\Business::query()->latest()->get();
     }
@@ -130,36 +145,29 @@ new class extends Component {
         $this->resetPage();
     }
 
-    #[\Livewire\Attributes\Computed]
-    public function users()
+    public function updatedPerPage()
     {
-        return User::query()
+        $this->resetPage();
+    }
+
+    #[\Livewire\Attributes\Computed]
+    public function customers(): _IH_Customer_C|LengthAwarePaginator|array
+    {
+        return \App\Models\Customer::query()
             ->with(['business'])
-            ->withCount(['roles'])
             ->when($this->search, function (Builder $query) {
                 $query->where('name', 'like', '%' . $this->search . '%')
                     ->orWhere('email', 'like', '%' . $this->search . '%')
                     ->orWhere('phone', 'like', '%' . $this->search . '%');
             })
-            ->when($this->statusFilter != 'All', function (Builder $query) {
-                if ($this->statusFilter == 'Active') {
-                    $query->where('is_active', true);
-                } else if ($this->statusFilter == 'Inactive') {
-                    $query->where('is_active', false);
-                }
-            })
             ->orderBy($this->sortBy, $this->sortDirection)
-            ->paginate(10);
+            ->paginate($this->perPage);
     }
 
-    private function getRoles(): Collection
-    {
-        return \Spatie\Permission\Models\Role::query()->latest()->get();
-    }
 
     public function resetFormData(): void
     {
-        $this->reset(['name', 'phone', 'editingId', 'email', 'address', 'is_active', 'business_id', 'roleIds']);
+        $this->reset(['name', 'phone', 'email', 'notes', 'business_id', 'editingId']);
     }
 };
 ?>
@@ -199,14 +207,13 @@ new class extends Component {
         <flux:card class="space-y-6">
             <div class="flex items-center gap-4 justify-between">
                 <div>
-
                     <flux:dropdown>
-                        <flux:button icon:trailing="chevron-down">Filter Status</flux:button>
+                        <flux:button icon:trailing="chevron-down">Per Page</flux:button>
                         <flux:menu>
-                            <flux:menu.radio.group wire:model.live="statusFilter">
-                                <flux:menu.radio>All</flux:menu.radio>
-                                <flux:menu.radio>Active</flux:menu.radio>
-                                <flux:menu.radio>Inactive</flux:menu.radio>
+                            <flux:menu.radio.group wire:model.live="perPage">
+                                @foreach ($pageSizes as $size)
+                                    <flux:menu.radio :value="$size">{{ $size }} per page</flux:menu.radio>
+                                @endforeach
                             </flux:menu.radio.group>
                         </flux:menu>
                     </flux:dropdown>
@@ -224,7 +231,7 @@ new class extends Component {
             {{--            <flux:input  placeholder="Search orders" />--}}
 
             <div wire:loading.class="opacity-50 pointer-events-none">
-                <flux:table :paginate="$this->users">
+                <flux:table :paginate="$this->customers">
                     <flux:table.columns>
                         <flux:table.column sortable :sorted="$sortBy === 'created_at'" :direction="$sortDirection"
                                            wire:click="sort('created_at')">
@@ -234,6 +241,10 @@ new class extends Component {
                                            wire:click="sort('name')">
                             Name
                         </flux:table.column>
+                        <flux:table.column sortable :sorted="$sortBy === 'phone'" :direction="$sortDirection"
+                                           wire:click="sort('phone')">
+                            Phone
+                        </flux:table.column>
                         <flux:table.column sortable :sorted="$sortBy === 'email'" :direction="$sortDirection"
                                            wire:click="sort('email')">
                             Email
@@ -242,11 +253,6 @@ new class extends Component {
                                            wire:click="sort('business_id')">
                             Business
                         </flux:table.column>
-                        <flux:table.column>Roles</flux:table.column>
-                        <flux:table.column sortable :sorted="$sortBy === 'status'" :direction="$sortDirection"
-                                           wire:click="sort('status')">
-                            Status
-                        </flux:table.column>
                         <flux:table.column>
                             Actions
                         </flux:table.column>
@@ -254,25 +260,19 @@ new class extends Component {
                     </flux:table.columns>
 
                     <flux:table.rows>
-                        @foreach ($this->users as $order)
+                        @foreach ($this->customers as $order)
                             <flux:table.row :key="$order->id">
                                 <flux:table.cell
                                     class="flex items-center gap-3">{{ $order->created_at->format("Y-m-d h:i:s") }}</flux:table.cell>
                                 <flux:table.cell class="whitespace-nowrap">{{ $order->name }}</flux:table.cell>
                                 <flux:table.cell class="whitespace-nowrap">
-                                    <span class="text-sm block text-black mb-1">{{ $order->email }}</span>
-                                    <span class="text-xs block">{{ $order->phone }}</span>
+                                    {{ $order->phone }}
+                                </flux:table.cell>
+                                <flux:table.cell class="whitespace-nowrap">
+                                    {{ $order->email }}
                                 </flux:table.cell>
                                 <flux:table.cell
                                     class="whitespace-nowrap">{{ $order->business->name??'N/A' }}</flux:table.cell>
-                                <flux:table.cell class="whitespace-nowrap">{{ $order->roles_count }}</flux:table.cell>
-
-                                <flux:table.cell>
-                                    <flux:badge size="sm" :color="$order->is_active?'green':'red'" rounded
-                                                inset="top bottom">{{ $order->is_active?'Active':'Inactive' }}</flux:badge>
-                                </flux:table.cell>
-
-
                                 <flux:table.cell>
                                     <flux:dropdown>
                                         <flux:button size="sm" icon:trailing="chevron-down"></flux:button>
@@ -311,10 +311,27 @@ new class extends Component {
                 </div>
                 <form wire:submit="save" class="space-y-6">
                     <div class="space-y-6">
+                        @if(auth()->user()->is_super_admin)
+                            <div>
+                                <x-forms.select
+                                    :options="$this->businesses"
+                                    id="business_id"
+                                    label="Business"
+                                    placeholder="Choose a business"
+                                    wire:model="business_id"
+                                />
+                                @error('business_id')
+                                <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text>
+                                @enderror
+                            </div>
+                        @endif
+
                         <flux:input label="Name" wire:model="name" placeholder="Name"/>
                         <flux:input type="email" label="Email" wire:model="email" placeholder="Email Address"/>
                         <flux:input type="tel" label="Phone" wire:model="phone" placeholder="Phone Number"/>
-
+                        <flux:textarea
+                            label="Notes" wire:model="notes" placeholder="Additional notes"
+                        />
                     </div>
                     <div class="flex gap-2 ">
                         <flux:spacer/>

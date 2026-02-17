@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property int $id
@@ -28,5 +30,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Customer extends Model
 {
-    //
+    use HasFactory;
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
 }
