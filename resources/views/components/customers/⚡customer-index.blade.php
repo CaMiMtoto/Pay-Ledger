@@ -178,7 +178,7 @@ new class extends Component {
             <flux:breadcrumbs.item wire:navigate href="{{ route('admin.dashboard') }}" separator="slash">
                 Dashboard
             </flux:breadcrumbs.item>
-            <flux:breadcrumbs.item separator="slash">Users</flux:breadcrumbs.item>
+            <flux:breadcrumbs.item separator="slash">Customers</flux:breadcrumbs.item>
         </flux:breadcrumbs>
     </div>
     <div class="relative w-full">

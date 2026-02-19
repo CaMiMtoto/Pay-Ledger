@@ -26,6 +26,10 @@
                                :current="request()->routeIs('admin.businesses.list')" wire:navigate>
                 {{ __('Businesses') }}
             </flux:sidebar.item>
+            <flux:sidebar.item icon="wallet-cards" :href="route('admin.debts.list')"
+                               :current="request()->routeIs('admin.debts.list')" wire:navigate>
+                {{ __('Debts') }}
+            </flux:sidebar.item>
         </flux:sidebar.group>
         <flux:sidebar.group icon="users" expandable heading="User Management" class="grid">
             @can(AppPermission::MANAGE_USERS)
