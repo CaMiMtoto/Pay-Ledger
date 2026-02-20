@@ -12,17 +12,18 @@ new class extends Component {
 
     // Debt form fields
     public string $amount = '';
-    public string $due_date = '';
-    public string $debt_notes = '';
+    public string $transaction_date = '';
+    public string $description = '';
 
     // Payment form fields
     public string $payment_amount = '';
     public string $payment_date = '';
-    public string $payment_notes = '';
+    public string $payment_description = '';
 
     public function mount(Customer $customer): void
     {
         $this->customer = $customer->load('business');
+        $this->transaction_date = now()->format('Y-m-d');
         $this->payment_date = now()->format('Y-m-d');
     }
 
@@ -30,18 +31,17 @@ new class extends Component {
     {
         $this->validate([
             'amount' => ['required', 'numeric', 'min:1'],
-            'due_date' => ['required', 'date', 'after_or_equal:today'],
-            'debt_notes' => ['nullable', 'string', 'max:255'],
+            'transaction_date' => ['required', 'date'],
+            'description' => ['nullable', 'string', 'max:255'],
         ]);
 
         $this->customer->transactions()->create([
             'business_id' => $this->customer->business_id,
             'customer_id' => $this->customer->id,
             'amount' => $this->amount,
-            'type' => 'debt',
             'direction' => 1, // 1 for debt
-            'due_date' => $this->due_date,
-            'notes' => $this->debt_notes,
+            'transaction_date' => $this->transaction_date,
+            'description' => $this->description,
             'created_by' => auth()->id(),
         ]);
 
@@ -55,19 +55,18 @@ new class extends Component {
     public function savePayment(): void
     {
         $this->validate([
-            'payment_amount' => ['required', 'numeric', 'min:1', 'max:' . $this->customer->balance],
+            'payment_amount' => ['required', 'numeric', 'min:1'],
             'payment_date' => ['required', 'date'],
-            'payment_notes' => ['nullable', 'string', 'max:255'],
+            'payment_description' => ['nullable', 'string', 'max:255'],
         ]);
 
         $this->customer->transactions()->create([
             'business_id' => $this->customer->business_id,
             'customer_id' => $this->customer->id,
             'amount' => $this->payment_amount,
-            'type' => 'payment',
             'direction' => -1, // -1 for payment
             'transaction_date' => $this->payment_date,
-            'notes' => $this->payment_notes,
+            'description' => $this->payment_description,
             'created_by' => auth()->id(),
         ]);
 
@@ -80,13 +79,14 @@ new class extends Component {
 
     public function resetDebtForm(): void
     {
-        $this->reset(['amount', 'due_date', 'debt_notes']);
+        $this->reset(['amount', 'description']);
+        $this->transaction_date = now()->format('Y-m-d');
         $this->resetErrorBag();
     }
 
     public function resetPaymentForm(): void
     {
-        $this->reset(['payment_amount', 'payment_notes']);
+        $this->reset(['payment_amount', 'payment_description']);
         $this->payment_date = now()->format('Y-m-d');
         $this->resetErrorBag();
     }
@@ -115,7 +115,7 @@ new class extends Component {
         </flux:breadcrumbs>
     </div>
     <div class="relative w-full">
-        <div class="flex justify-between">
+        <div class="flex flex-col md:flex-row justify-between">
             <div>
                 <flux:heading size="xl" level="1">
                     {{ $customer->name }}'s Ledger
@@ -124,7 +124,7 @@ new class extends Component {
                     Manage customer transactions and balance.
                 </flux:subheading>
             </div>
-            <div>
+            <div class="flex gap-2">
                 <flux:modal.trigger name="debt-modal">
                     <flux:button type="button" variant="primary">
                         Record Debt
@@ -167,30 +167,28 @@ new class extends Component {
                 <flux:table.column>Date</flux:table.column>
                 <flux:table.column>Type</flux:table.column>
                 <flux:table.column>Amount</flux:table.column>
-                <flux:table.column>Due Date</flux:table.column>
-                <flux:table.column>Notes</flux:table.column>
+                <flux:table.column>Description</flux:table.column>
                 <flux:table.column>Actions</flux:table.column>
             </flux:table.columns>
 
             <flux:table.rows>
                 @forelse ($this->transactions as $transaction)
                     <flux:table.row :key="$transaction->id">
-                        <flux:table.cell>{{ $transaction->created_at->format("Y-m-d") }}</flux:table.cell>
+                        <flux:table.cell>{{ $transaction->transaction_date->format("Y-m-d") }}</flux:table.cell>
                         <flux:table.cell>
-                            <flux:badge :color="$transaction->type === 'debt' ? 'red' : 'green'">
-                                {{ ucfirst($transaction->type) }}
+                            <flux:badge :color="$transaction->direction === 1 ? 'red' : 'green'" size="sm">
+                                {{ $transaction->direction === 1 ? 'Debt' : 'Payment' }}
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>{{ Number::currency($transaction->amount) }}</flux:table.cell>
-                        <flux:table.cell>{{ $transaction->due_date?->format("Y-m-d") }}</flux:table.cell>
-                        <flux:table.cell>{{ $transaction->notes }}</flux:table.cell>
+                        <flux:table.cell>{{ $transaction->description }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:button size="sm" icon="ellipsis-vertical"/>
                         </flux:table.cell>
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="6" class="text-center">
+                        <flux:table.cell colspan="5" class="text-center">
                             No transactions found.
                         </flux:table.cell>
                     </flux:table.row>
@@ -217,12 +215,12 @@ new class extends Component {
                         @error('amount') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                     <div>
-                        <flux:input label="Due Date" wire:model="due_date" type="date"/>
-                        @error('due_date') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                        <flux:input label="Date" wire:model="transaction_date" type="date"/>
+                        @error('transaction_date') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                     <div>
-                        <flux:textarea label="Notes" wire:model="debt_notes" placeholder="Additional notes"/>
-                        @error('debt_notes') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                        <flux:textarea label="Description" wire:model="description" placeholder="Description"/>
+                        @error('description') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                 </div>
                 <div class="flex gap-2 justify-end">
@@ -253,12 +251,12 @@ new class extends Component {
                         @error('payment_amount') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                     <div>
-                        <flux:input label="Payment Date" wire:model="payment_date" type="date"/>
+                        <flux:input label="Date" wire:model="payment_date" type="date"/>
                         @error('payment_date') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                     <div>
-                        <flux:textarea label="Notes" wire:model="payment_notes" placeholder="Additional notes"/>
-                        @error('payment_notes') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                        <flux:textarea label="Description" wire:model="payment_description" placeholder="Description"/>
+                        @error('payment_description') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                 </div>
                 <div class="flex gap-2 justify-end">
