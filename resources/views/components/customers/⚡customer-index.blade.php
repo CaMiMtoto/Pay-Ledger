@@ -76,12 +76,7 @@ new class extends Component {
             'notes' => ['nullable', 'string', 'max:255'],
             'business_id' => [
                 // If the user is super admin, business_id is required and must exist in businesses table
-                Rule::requiredIf(fn() => auth()->user()->is_super_admin),
-                Rule::exists('businesses', 'id')->where(function ($query) {
-                    if (!auth()->user()->is_super_admin) {
-                        $query->where('id', auth()->user()->business_id);
-                    }
-                }),
+                Rule::requiredIf(fn() => auth()->user()->is_super_admin && auth()->user()->business_id == null),
             ]
         ]);
         $isNewUser = !$this->editingId;
@@ -145,7 +140,7 @@ new class extends Component {
         $this->resetPage();
     }
 
-    public function updatedPerPage()
+    public function updatedPerPage(): void
     {
         $this->resetPage();
     }
@@ -155,6 +150,9 @@ new class extends Component {
     {
         return \App\Models\Customer::query()
             ->with(['business'])
+            ->when(auth()->user()->business_id, function (Builder $query) {
+                $query->where('business_id', auth()->user()->business_id);
+            })
             ->when($this->search, function (Builder $query) {
                 $query->where('name', 'like', '%' . $this->search . '%')
                     ->orWhere('email', 'like', '%' . $this->search . '%')
@@ -278,13 +276,15 @@ new class extends Component {
                                         <flux:button size="sm" icon:trailing="chevron-down"></flux:button>
 
                                         <flux:menu>
-
-                                            <flux:menu.item icon="square-pen" wire:click="edit({{$order->id}})">
+                                            <flux:menu.item wire:navigate
+                                                            href="{{ route('admin.customers.ledgers', encodeId($order->id)) }}">
+                                                Ledgers
+                                            </flux:menu.item>
+                                            <flux:menu.item wire:click="edit({{$order->id}})">
                                                 Edit
                                             </flux:menu.item>
                                             <flux:menu.item variant="danger"
-                                                            wire:click="confirmDeletion({{$order->id}})"
-                                                            icon="trash">
+                                                            wire:click="confirmDeletion({{$order->id}})">
                                                 Delete
                                             </flux:menu.item>
                                         </flux:menu>
@@ -311,7 +311,7 @@ new class extends Component {
                 </div>
                 <form wire:submit="save" class="space-y-6">
                     <div class="space-y-6">
-                        @if(auth()->user()->is_super_admin)
+                        @if(auth()->user()->is_super_admin && auth()->user()->business_id == null)
                             <div>
                                 <x-forms.select
                                     :options="$this->businesses"
@@ -324,6 +324,8 @@ new class extends Component {
                                 <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text>
                                 @enderror
                             </div>
+                        @else
+                            <input type="hidden" wire:model="business_id" value="{{auth()->user()->business_id}}"/>
                         @endif
 
                         <flux:input label="Name" wire:model="name" placeholder="Name"/>

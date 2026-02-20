@@ -30,6 +30,10 @@
                                :current="request()->routeIs('admin.debts.list')" wire:navigate>
                 {{ __('Debts') }}
             </flux:sidebar.item>
+            <flux:sidebar.item icon="credit-card" :href="route('admin.payment-index')"
+                               :current="request()->routeIs('admin.payment-index')" wire:navigate>
+                {{ __('Payments') }}
+            </flux:sidebar.item>
         </flux:sidebar.group>
         <flux:sidebar.group icon="users" expandable heading="User Management" class="grid">
             @can(AppPermission::MANAGE_USERS)
@@ -39,8 +43,12 @@
                 </flux:sidebar.item>
             @endcan
 
-            <flux:sidebar.item :href="route('admin.roles.list')" :current="request()->routeIs('admin.roles.list')" wire:navigate>Roles</flux:sidebar.item>
-            <flux:sidebar.item :href="route('admin.permissions.list')" :current="request()->routeIs('admin.permissions.list')" wire:navigate>Permissions</flux:sidebar.item>
+            <flux:sidebar.item :href="route('admin.roles.list')" :current="request()->routeIs('admin.roles.list')"
+                               wire:navigate>Roles
+            </flux:sidebar.item>
+            <flux:sidebar.item :href="route('admin.permissions.list')"
+                               :current="request()->routeIs('admin.permissions.list')" wire:navigate>Permissions
+            </flux:sidebar.item>
         </flux:sidebar.group>
     </flux:sidebar.nav>
 

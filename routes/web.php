@@ -12,8 +12,10 @@ require __DIR__ . '/settings.php';
 Route::group(['middleware' => 'auth', 'prefix' => 'admin', 'as' => 'admin.'], function () {
     Route::livewire('/dashboard', 'dashboard.overview')->middleware(['auth', 'verified'])->name('dashboard');
     Route::livewire('/customers', 'customers.customer-index')->name('customers.index');
+    Route::livewire('/customers/{customer}/ledgers', 'customers.ledgers')->name('customers.ledgers');
     Route::livewire('/businesses', 'business.list')->name('businesses.list');
     Route::livewire('/debts', 'debts.list')->name('debts.list');
+    Route::livewire('/payments', 'payments.payment-index')->name('payment-index');
 
     Route::livewire('/users', 'users.list')->name('users.list')->middleware('can:' . AppPermission::MANAGE_USERS);
     Route::livewire('/roles', 'roles.list')->name('roles.list')->middleware('can:' . AppPermission::MANAGE_ROLES);

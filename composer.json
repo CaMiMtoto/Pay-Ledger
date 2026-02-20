@@ -20,7 +20,8 @@
         "mallardduck/blade-lucide-icons": "^1.26",
         "spatie/browsershot": "^5.2",
         "spatie/laravel-pdf": "^2.1",
-        "spatie/laravel-permission": "^7.0"
+        "spatie/laravel-permission": "^7.0",
+        "sqids/sqids": "^0.5.0"
     },
     "require-dev": {
         "barryvdh/laravel-ide-helper": "^3.6",
@@ -40,7 +41,10 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "files": [
+            "app/globals.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

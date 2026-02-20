@@ -4,6 +4,16 @@ use Livewire\Component;
 
 new class extends Component {
     use \Livewire\WithPagination;
+//
+//Dashboard should show:
+//
+//Total outstanding
+//
+//Total collected this month
+//
+//Overdue debts
+//
+//Top 5 customers by balance
 
     #[\Livewire\Attributes\Computed]
     public function paginator(): \Illuminate\Pagination\LengthAwarePaginator

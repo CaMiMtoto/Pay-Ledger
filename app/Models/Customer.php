@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasEncodedId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property \Carbon\CarbonImmutable|null $updated_at
  * @property int|null $created_by
  * @property-read \App\Models\Business $business
+ * @property-read mixed $balance
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Transaction> $transactions
+ * @property-read int|null $transactions_count
  * @method static \Database\Factories\CustomerFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer newQuery()
@@ -34,9 +38,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Customer extends Model
 {
-    use HasFactory;
+    use HasFactory,HasEncodedId;
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+    public function transactions(): Customer|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Transaction::class);
+    }
+
+    public function getBalanceAttribute()
+    {
+        return $this->transactions()
+            ->selectRaw('COALESCE(SUM(amount * direction),0) as balance')
+            ->value('balance');
     }
 }
