@@ -17,12 +17,12 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $email
  * @property \Carbon\CarbonImmutable|null $email_verified_at
  * @property string|null $password
- * @property string|null $remember_token
- * @property \Carbon\CarbonImmutable|null $created_at
- * @property \Carbon\CarbonImmutable|null $updated_at
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property string|null $two_factor_confirmed_at
+ * @property string|null $remember_token
+ * @property \Carbon\CarbonImmutable|null $created_at
+ * @property \Carbon\CarbonImmutable|null $updated_at
  * @property int|null $business_id
  * @property string|null $phone
  * @property string|null $address

@@ -1,9 +1,11 @@
 <?php
 
+use App\Models\Customer;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use LaravelIdea\Helper\App\Models\_IH_Business_C;
 use LaravelIdea\Helper\App\Models\_IH_Customer_C;
@@ -19,8 +21,7 @@ new class extends Component {
     public string $notes = '';
     public ?int $business_id = null;
     public ?int $editingId = null;
-    #[\Livewire\Attributes\Url(except: 10)]
-    public int $perPage = 10;
+
     public ?\App\Models\Customer $deletingRecord = null;
     #[\Livewire\Attributes\Url(except: '')]
     public string $sortBy = 'created_at';
@@ -31,11 +32,21 @@ new class extends Component {
     public bool $showModal = false;
     public string $statusFilter = 'All';
     public Collection $businesses;
-    public array $pageSizes = [10, 25, 50, 100];
+
+    public array $financialSummary = [];
+
+    public array $filters = [
+        'all', 'owing', 'settled', 'overpaid'
+    ];
+    #[\Livewire\Attributes\Url(except: 'all')]
+    public string $filter = 'all';
 
     public function mount(): void
     {
         $this->businesses = $this->getBusinesses();
+        if (request('add')) {
+            $this->modal('add-modal')->show();
+        }
     }
 
     public function sort($column): void
@@ -70,7 +81,7 @@ new class extends Component {
                 'string',
                 'max:20',
                 // must be either 10 digits starting with 0, or 12 digits starting with 25
-                'regex:/^(0\d{9}|25\d{11})$/',
+//                'regex:/^(0\d{9}|25\d{11})$/',
                 Rule::unique('users', 'phone')->ignore($this->editingId),
             ],
             'notes' => ['nullable', 'string', 'max:255'],
@@ -146,27 +157,82 @@ new class extends Component {
     }
 
     #[\Livewire\Attributes\Computed]
-    public function customers(): _IH_Customer_C|LengthAwarePaginator|array
+    public function customers(): LengthAwarePaginator
     {
-        return \App\Models\Customer::query()
-            ->with(['business'])
-            ->when(auth()->user()->business_id, function (Builder $query) {
-                $query->where('business_id', auth()->user()->business_id);
+        return Customer::query()
+            ->with('business')
+            ->leftJoin('transactions', 'customers.id', '=', 'transactions.customer_id')
+            ->select('customers.*')
+            ->selectRaw('COALESCE(SUM(transactions.amount * transactions.direction),0) as balance_amount')
+            ->where('customers.business_id', auth()->user()->business_id)
+            ->groupBy('customers.id')
+            ->when($this->search, function ($query) {
+                $query->where(function ($q) {
+                    $q->where('customers.name', 'like', '%' . $this->search . '%')
+                        ->orWhere('customers.email', 'like', '%' . $this->search . '%')
+                        ->orWhere('customers.phone', 'like', '%' . $this->search . '%');
+                });
             })
-            ->when($this->search, function (Builder $query) {
-                $query->where('name', 'like', '%' . $this->search . '%')
-                    ->orWhere('email', 'like', '%' . $this->search . '%')
-                    ->orWhere('phone', 'like', '%' . $this->search . '%');
+            ->when($this->filter !== 'all', function ($query) {
+                if ($this->filter === 'owing') {
+                    $query->havingRaw('balance_amount > 0');
+                } elseif ($this->filter === 'settled') {
+                    $query->havingRaw('balance_amount = 0');
+                } elseif ($this->filter === 'overpaid') {
+                    $query->havingRaw('balance_amount < 0');
+                }
             })
             ->orderBy($this->sortBy, $this->sortDirection)
-            ->paginate($this->perPage);
+            ->paginate(10);
     }
-
 
     public function resetFormData(): void
     {
         $this->reset(['name', 'phone', 'email', 'notes', 'business_id', 'editingId']);
     }
+
+
+    #[\Livewire\Attributes\Computed]
+    public function totalOutstanding(): float
+    {
+        $query = \App\Models\Customer::query()
+            ->leftJoin('transactions', function ($join) {
+                $join->on('customers.id', '=', 'transactions.customer_id')
+                    ->where('transactions.business_id', auth()->user()->business_id);
+            })
+            ->where('customers.business_id', auth()->user()->business_id)
+            ->selectRaw('COALESCE(SUM(transactions.amount * transactions.direction),0) as balance')
+            ->groupBy('customers.id')
+            ->havingRaw('balance > 0');
+
+        return DB::query()->fromSub($query, 'sub')->sum('balance');
+    }
+
+    #[\Livewire\Attributes\Computed]
+    public function totalOverpaid(): float
+    {
+        $query = \App\Models\Customer::query()
+            ->leftJoin('transactions', function ($join) {
+                $join->on('customers.id', '=', 'transactions.customer_id')
+                    ->where('transactions.business_id', auth()->user()->business_id);
+            })
+            ->where('customers.business_id', auth()->user()->business_id)
+            ->selectRaw('COALESCE(SUM(transactions.amount * transactions.direction),0) as balance')
+            ->groupBy('customers.id')
+            ->havingRaw('balance < 0');
+
+        return abs(DB::query()->fromSub($query, 'sub')->sum('balance'));
+    }
+
+    #[\Livewire\Attributes\Computed]
+    public function netPosition(): float
+    {
+        return \App\Models\Transaction::query()
+            ->where('business_id', auth()->user()->business_id)
+            ->selectRaw('COALESCE(SUM(amount * direction),0) as net')
+            ->value('net');
+    }
+
 };
 ?>
 
@@ -200,17 +266,46 @@ new class extends Component {
     </div>
     <x-app-flash/>
 
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+        <!-- Outstanding -->
+        <flux:card>
+            <div class="text-sm text-gray-500">Total Outstanding</div>
+            <div class="text-2xl font-bold text-red-600">
+                {{ number_format($this->totalOutstanding, 2) }}
+            </div>
+        </flux:card>
+
+        <!-- Overpaid -->
+        <flux:card>
+            <div class="text-sm text-gray-500">Total Overpaid</div>
+            <div class="text-2xl font-bold text-green-600">
+                {{ number_format($this->totalOverpaid, 2) }}
+            </div>
+        </flux:card>
+
+        <!-- Net Position -->
+        <flux:card>
+            <div class="text-sm text-gray-500">Net Position</div>
+            <div
+                class="text-2xl font-bold {{ $this->netPosition >= 0 ? 'text-red-600' : 'text-green-600' }}">
+                {{ number_format($this->netPosition, 2) }}
+            </div>
+        </flux:card>
+
+    </div>
+
     <div>
         {{-- TABLE --}}
         <flux:card class="space-y-6">
             <div class="flex items-center gap-4 justify-between">
                 <div>
                     <flux:dropdown>
-                        <flux:button icon:trailing="chevron-down">Per Page</flux:button>
+                        <flux:button icon:trailing="chevron-down">Filter</flux:button>
                         <flux:menu>
-                            <flux:menu.radio.group wire:model.live="perPage">
-                                @foreach ($pageSizes as $size)
-                                    <flux:menu.radio :value="$size">{{ $size }} per page</flux:menu.radio>
+                            <flux:menu.radio.group wire:model.live="filter">
+                                @foreach ($filters as $item)
+                                    <flux:menu.radio :value="$item">{{ ucfirst($item) }}</flux:menu.radio>
                                 @endforeach
                             </flux:menu.radio.group>
                         </flux:menu>
@@ -243,6 +338,7 @@ new class extends Component {
                                            wire:click="sort('phone')">
                             Phone
                         </flux:table.column>
+                        <flux:table.column>Balance</flux:table.column>
                         <flux:table.column sortable :sorted="$sortBy === 'email'" :direction="$sortDirection"
                                            wire:click="sort('email')">
                             Email
@@ -267,14 +363,19 @@ new class extends Component {
                                     {{ $order->phone }}
                                 </flux:table.cell>
                                 <flux:table.cell class="whitespace-nowrap">
+                                    <flux:badge size="sm" variant="primary" rounded
+                                                color="{{$order->balance_amount>0?'red':'green'}}">
+                                        {{ number_format($order->balance_amount) }}
+                                    </flux:badge>
+                                </flux:table.cell>
+                                <flux:table.cell class="whitespace-nowrap">
                                     {{ $order->email }}
                                 </flux:table.cell>
                                 <flux:table.cell
                                     class="whitespace-nowrap">{{ $order->business->name??'N/A' }}</flux:table.cell>
                                 <flux:table.cell>
                                     <flux:dropdown>
-                                        <flux:button size="sm" icon:trailing="chevron-down"></flux:button>
-
+                                        <flux:button icon:trailing="ellipsis-vertical" size="xs"></flux:button>
                                         <flux:menu>
                                             <flux:menu.item wire:navigate
                                                             href="{{ route('admin.customers.ledgers', encodeId($order->id)) }}">

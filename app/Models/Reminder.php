@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * @property int $id
- * @property int $debt_id
+ * @property int $transaction_id
  * @property string $channel
  * @property string $sent_at
  * @property \Carbon\CarbonImmutable|null $created_at
@@ -16,9 +16,9 @@ use Illuminate\Database\Eloquent\Model;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereChannel($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereDebtId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereSentAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereTransactionId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Reminder whereUpdatedAt($value)
  * @mixin \Eloquent
  */
