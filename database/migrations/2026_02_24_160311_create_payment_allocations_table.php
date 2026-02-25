@@ -10,11 +10,11 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create('reminders', function (Blueprint $table) {
+        Schema::create('payment_allocations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('transaction_id')->constrained();
-            $table->enum('channel', ['sms', 'whatsapp', 'email']);
-            $table->timestamp('sent_at');
+            $table->foreignIdFor(\App\Models\Payment::class)->constrained();
+            $table->foreignIdFor(\App\Models\Debt::class)->constrained();
+            $table->decimal('amount_applied', 14);
             $table->timestamps();
         });
     }
@@ -24,6 +24,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists('reminders');
+        Schema::dropIfExists('payment_allocations');
     }
 };

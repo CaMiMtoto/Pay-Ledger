@@ -17,14 +17,11 @@ class DebtFactory extends Factory
     {
         return [
             'description' => $this->faker->text(),
-            'due_date' => $this->faker->dateTimeBetween('+1 week', '+1 month'),
-            'status' => $this->faker->randomElement([Status::UNPAID, Status::PAID, Status::PARTIAL]),
-            'created_at' => Carbon::now(),
-            'updated_at' => Carbon::now(),
-            'amount' => $this->faker->randomFloat(),
-            'remaining_amount' => $this->faker->randomFloat(),
-            'business_id' => Business::query()->inRandomOrder()->first()->id,
-            'customer_id' => Customer::query()->inRandomOrder()->first()->id,
+            'due_date' => $this->faker->dateTimeBetween('-1 month', '+1 month'),
+            'amount' => $this->faker->randomFloat(2, 100, 1000),
+            'paid_amount' => 0,
+            'business_id' => Business::factory(),
+            'customer_id' => Customer::factory(),
         ];
     }
 }

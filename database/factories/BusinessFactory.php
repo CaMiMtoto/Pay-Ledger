@@ -15,7 +15,7 @@ class BusinessFactory extends Factory
         $subscription_statuses = ['active', 'inactive', 'pending', 'cancelled', 'trial'];
 
         return [
-            'name' => $this->faker->name(),
+            'name' => $this->faker->company(),
             'phone' => $this->faker->phoneNumber(),
             'subscription_status' => $this->faker->randomElement($subscription_statuses),
             'address' => $this->faker->address(),

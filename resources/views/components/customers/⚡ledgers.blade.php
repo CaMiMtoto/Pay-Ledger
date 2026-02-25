@@ -1,18 +1,34 @@
 <?php
 
 use App\Models\Customer;
+use App\Models\Debt;
+use App\Models\PaymentAllocation;
 use App\Models\Transaction;
+use App\Services\DebtService;
+use App\Services\PaymentService;
+use App\Services\TransactionService;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Component;
 use Livewire\WithPagination;
+use function Spatie\LaravelPdf\Support\pdf;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 new class extends Component {
     use WithPagination;
+
+    #[\Livewire\Attributes\Url(except: '')]
+    public ?string $startDate = null;
+    #[\Livewire\Attributes\Url(except: '')]
+    public ?string $endDate = null;
+    #[\Livewire\Attributes\Url(except: '')]
+    public string $search = '';
 
     public Customer $customer;
 
     // Debt form fields
     public string $amount = '';
     public string $transaction_date = '';
+    public string $due_date = '';
     public string $description = '';
 
     // Payment form fields
@@ -29,22 +45,17 @@ new class extends Component {
 
     public function saveDebt(): void
     {
-        $this->validate([
+        $data = $this->validate([
             'amount' => ['required', 'numeric', 'min:1'],
             'transaction_date' => ['required', 'date'],
+            'due_date' => ['nullable', 'date'],
             'description' => ['nullable', 'string', 'max:255'],
         ]);
+        DB::beginTransaction();
 
-        $this->customer->transactions()->create([
-            'business_id' => $this->customer->business_id,
-            'customer_id' => $this->customer->id,
-            'amount' => $this->amount,
-            'direction' => 1, // 1 for debt
-            'transaction_date' => $this->transaction_date,
-            'description' => $this->description,
-            'created_by' => auth()->id(),
-        ]);
-
+        $debt = (new DebtService())->save($this->customer, $this->amount, $this->due_date, $this->description);
+        $transaction = (new TransactionService())->save($this->customer, $this->amount, 1, $this->transaction_date, $this->description);
+        DB::commit();
         $this->customer->refresh();
 
         $this->modal('debt-modal')->close();
@@ -59,19 +70,14 @@ new class extends Component {
             'payment_date' => ['required', 'date'],
             'payment_description' => ['nullable', 'string', 'max:255'],
         ]);
-
-        $this->customer->transactions()->create([
-            'business_id' => $this->customer->business_id,
-            'customer_id' => $this->customer->id,
-            'amount' => $this->payment_amount,
-            'direction' => -1, // -1 for payment
-            'transaction_date' => $this->payment_date,
-            'description' => $this->payment_description,
-            'created_by' => auth()->id(),
-        ]);
-
+        DB::beginTransaction();
+        $customerId = $this->customer->id;
+        $paymentService = new PaymentService();
+        $payment = $paymentService->save($this->customer, $this->payment_amount, $this->payment_date, $this->payment_description);
+        (new TransactionService())->save($this->customer, $this->payment_amount, -1, $this->payment_date, $this->payment_description);
+        $paymentService->updateDebts($payment, $customerId);
+        DB::commit();
         $this->customer->refresh();
-
         $this->modal('payment-modal')->close();
         $this->resetPaymentForm();
         session()->flash("success", "Payment recorded successfully");
@@ -79,14 +85,14 @@ new class extends Component {
 
     public function resetDebtForm(): void
     {
-        $this->reset(['amount', 'description']);
+        $this->reset(['amount', 'description', 'due_date', 'transaction_date']);
         $this->transaction_date = now()->format('Y-m-d');
         $this->resetErrorBag();
     }
 
     public function resetPaymentForm(): void
     {
-        $this->reset(['payment_amount', 'payment_description']);
+        $this->reset(['payment_amount', 'payment_description', 'payment_date']);
         $this->payment_date = now()->format('Y-m-d');
         $this->resetErrorBag();
     }
@@ -94,7 +100,40 @@ new class extends Component {
     #[Livewire\Attributes\Computed]
     public function transactions()
     {
-        return $this->customer->transactions()->latest()->paginate(10);
+        return $this->getTransactionBuilder()
+            ->paginate(10);
+    }
+
+    public function exportPdf(): StreamedResponse
+    {
+        $transactions = $this->getTransactionBuilder()->get();
+        $customer = $this->customer;
+        $business = $customer->business;
+        $fileName = \Illuminate\Support\Str::of($customer->name)->slug('_') . '_transactions.pdf';
+        $pdf = pdf()
+            ->view('pdf.customer_transactions', compact('customer', 'business', 'transactions'))
+            ->name($fileName);
+
+        return response()->streamDownload(
+            function () use ($pdf) {
+                echo $pdf->toResponse(request())->getContent();
+            },
+            $pdf->downloadName ?: $fileName,
+            ['Content-Type' => 'application/pdf']
+        );
+    }
+
+    /**
+     * @return Customer|Builder|\Illuminate\Database\Eloquent\Relations\HasMany|\Illuminate\Support\HigherOrderWhenProxy|mixed
+     */
+    public function getTransactionBuilder(): mixed
+    {
+        return $this->customer
+            ->transactions()
+            ->when($this->startDate, fn(Builder $query) => $query->whereDate('transaction_date', '>=', $this->startDate))
+            ->when($this->endDate, fn(Builder $query) => $query->whereDate('transaction_date', '<=', $this->endDate))
+            ->when($this->search, fn(Builder $query) => $query->where('description', 'like', '%' . $this->search . '%'))
+            ->latest();
     }
 };
 ?>
@@ -150,11 +189,11 @@ new class extends Component {
             <div class="text-right">
                 <flux:subheading class="text-gray-500 dark:text-gray-400">Current Balance</flux:subheading>
                 <flux:heading size="3xl" level="2"
-                              @class([
-                                  'text-red-600 dark:text-red-500' => $customer->balance > 0,
-                                  'text-green-600 dark:text-green-500' => $customer->balance <= 0,
-                              ])>
-                    {{ Number::currency($customer->balance ?? 0) }}
+                    @class([
+                        'text-red-600 dark:text-red-500' => $customer->balance > 0,
+                        'text-green-600 dark:text-green-500' => $customer->balance <= 0,
+                    ])>
+                    {{ number_format($customer->balance ?? 0) }}
                 </flux:heading>
             </div>
         </div>
@@ -162,6 +201,19 @@ new class extends Component {
 
     {{-- Transactions Table --}}
     <flux:card class="space-y-6">
+        {{--        filters--}}
+        <div class="flex flex-col md:flex-row justify-between items-center gap-2 w-full">
+            <div class="flex flex-col md:flex-row gap-2 w-full">
+                <flux:input type="date" class="w-full" wire:model.live="startDate"/>
+                <flux:input type="date" class="w-full" wire:model.live="endDate"/>
+            </div>
+            <div class="flex gap-2 items-start w-full">
+                <flux:input type="text" wire:model.live.debounce="search" icon="magnifying-glass"/>
+                <flux:button type="button" color="red" wire:click="exportPdf" variant="primary" icon="download">PDF
+                </flux:button>
+            </div>
+        </div>
+
         <flux:table :paginate="$this->transactions">
             <flux:table.columns>
                 <flux:table.column>Date</flux:table.column>
@@ -212,15 +264,16 @@ new class extends Component {
                 <div class="space-y-6">
                     <div>
                         <flux:input label="Amount" wire:model="amount" placeholder="Amount" type="number" step="any"/>
-                        @error('amount') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                     <div>
                         <flux:input label="Date" wire:model="transaction_date" type="date"/>
-                        @error('transaction_date') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                    </div>
+
+                    <div>
+                        <flux:input label="Reason" wire:model="description" placeholder="Description"/>
                     </div>
                     <div>
-                        <flux:textarea label="Description" wire:model="description" placeholder="Description"/>
-                        @error('description') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                        <flux:input label="Due Date" wire:model="due_date" type="date"/>
                     </div>
                 </div>
                 <div class="flex gap-2 justify-end">
@@ -247,16 +300,14 @@ new class extends Component {
             <form wire:submit="savePayment" class="space-y-6">
                 <div class="space-y-6">
                     <div>
-                        <flux:input label="Amount" wire:model="payment_amount" placeholder="Amount" type="number" step="any"/>
-                        @error('payment_amount') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                        <flux:input label="Amount" wire:model="payment_amount" placeholder="Amount" type="number"
+                                    step="any"/>
                     </div>
                     <div>
                         <flux:input label="Date" wire:model="payment_date" type="date"/>
-                        @error('payment_date') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
                     </div>
                     <div>
-                        <flux:textarea label="Description" wire:model="payment_description" placeholder="Description"/>
-                        @error('payment_description') <flux:text size="sm" color="red" class="mt-1">{{ $message }}</flux:text> @enderror
+                        <flux:input label="Description" wire:model="payment_description" placeholder="Description"/>
                     </div>
                 </div>
                 <div class="flex gap-2 justify-end">

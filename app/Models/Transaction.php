@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property \Carbon\CarbonImmutable|null $updated_at
  * @property-read \App\Models\Customer $customer
  * @property-read int|float $signed_amount
+ * @method static \Database\Factories\TransactionFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Transaction newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Transaction newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Transaction query()

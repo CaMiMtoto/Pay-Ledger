@@ -1,10 +1,9 @@
 ---
 name: fluxui-development
-description: >-
-  Develops UIs with Flux UI Free components. Activates when creating buttons, forms, modals,
-  inputs, dropdowns, checkboxes, or UI components; replacing HTML form elements with Flux;
-  working with flux: components; or when the user mentions Flux, component library, UI components,
-  form fields, or asks about available Flux components.
+description: "Develops UIs with Flux UI Free components. Activates when creating buttons, forms, modals, inputs, dropdowns, checkboxes, or UI components; replacing HTML form elements with Flux; working with flux: components; or when the user mentions Flux, component library, UI components, form fields, or asks about available Flux components."
+license: MIT
+metadata:
+  author: laravel
 ---
 
 # Flux UI Development
@@ -29,9 +28,10 @@ Flux UI is a component library for Livewire built with Tailwind CSS. It provides
 
 Use Flux UI components when available. Fall back to standard Blade components when no Flux component exists for your needs.
 
-<code-snippet name="Basic Button" lang="blade">
+<!-- Basic Button -->
+```blade
 <flux:button variant="primary">Click me</flux:button>
-</code-snippet>
+```
 
 ## Available Components (Free Edition)
 
@@ -41,9 +41,10 @@ Available: avatar, badge, brand, breadcrumbs, button, callout, checkbox, dropdow
 
 Flux includes [Heroicons](https://heroicons.com/) as its default icon set. Search for exact icon names on the Heroicons site - do not guess or invent icon names.
 
-<code-snippet name="Icon Button" lang="blade">
+<!-- Icon Button -->
+```blade
 <flux:button icon="arrow-down-tray">Export</flux:button>
-</code-snippet>
+```
 
 For icons not available in Heroicons, use [Lucide](https://lucide.dev/). Import the icons you need with the Artisan command:
 
@@ -55,22 +56,24 @@ php artisan flux:icon crown grip-vertical github
 
 ### Form Fields
 
-<code-snippet name="Form Field" lang="blade">
+<!-- Form Field -->
+```blade
 <flux:field>
     <flux:label>Email</flux:label>
     <flux:input type="email" wire:model="email" />
     <flux:error name="email" />
 </flux:field>
-</code-snippet>
+```
 
 ### Modals
 
-<code-snippet name="Modal" lang="blade">
+<!-- Modal -->
+```blade
 <flux:modal wire:model="showModal">
     <flux:heading>Title</flux:heading>
     <p>Content</p>
 </flux:modal>
-</code-snippet>
+```
 
 ## Verification
 
